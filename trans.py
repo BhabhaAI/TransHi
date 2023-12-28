@@ -1,6 +1,7 @@
 import sys
 sys.path.append("indic_nlp_library/IndicTrans2/huggingface_inference/")
 
+from nltk.tokenize import sent_tokenize
 from tqdm import tqdm
 import json
 import os
@@ -126,7 +127,7 @@ def chunk_and_translate(batched_data):
 
       for line in rows_split_by_newline:
           if line.strip():
-              line_split = [k.strip() for k in line.split(".") if k.strip()]
+              line_split = [k.strip() for k in sent_tokenize(line) if k.strip()]
               minibatch.extend(line_split)
               consecutive_newline_info[len(minibatch)] =  1
           else:
