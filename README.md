@@ -20,6 +20,9 @@ import nltk
 nltk.download('punkt')
 
 git clone https://github.com/AI4Bharat/IndicTrans2.git
+git clone https://github.com/VarunGumma/IndicTransTokenizer
+cd IndicTransTokenizer
+pip install --editable ./
 ```
 
 ## English to Hindi Translation   

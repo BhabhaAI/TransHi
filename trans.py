@@ -1,6 +1,3 @@
-import sys
-sys.path.append("indic_nlp_library/IndicTrans2/huggingface_inference/")
-
 from nltk.tokenize import sent_tokenize
 from tqdm import tqdm
 import json
@@ -8,14 +5,7 @@ import os
 import sys
 import torch
 from transformers import AutoModelForSeq2SeqLM, BitsAndBytesConfig
-from IndicTransTokenizer.utils import preprocess_batch, postprocess_batch
-from IndicTransTokenizer.tokenizer import IndicTransTokenizer
-
-en_indic_ckpt_dir = "ai4bharat/indictrans2-en-indic-1B" # ai4bharat/indictrans2-en-indic-dist-200M
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 12 # Modify based upon GPU memory
-ROW_BATCH = BATCH_SIZE*10 # Concatentate Batch_size*1 rows and then create chunks of BATCH_SIZE
-quantization = ""
+from IndicTransTokenizer import IndicProcessor, IndicTransTokenizer
 
 def initialize_model_and_tokenizer(ckpt_dir, direction, quantization):
 
@@ -54,12 +44,7 @@ def initialize_model_and_tokenizer(ckpt_dir, direction, quantization):
 
     return tokenizer, model
 
-
-en_indic_tokenizer, en_indic_model = initialize_model_and_tokenizer(
-    en_indic_ckpt_dir, "en-indic", quantization
-)
-
-def batch_translate(input_sentences, src_lang, tgt_lang, model, tokenizer):
+def batch_translate(input_sentences, src_lang, tgt_lang, model, tokenizer, ip):
 
     """
     Inference on a batch of sentences.
@@ -70,9 +55,7 @@ def batch_translate(input_sentences, src_lang, tgt_lang, model, tokenizer):
         batch = input_sentences[i : i + BATCH_SIZE]
 
         # Preprocess the batch and extract entity mappings
-        batch, entity_map = preprocess_batch(
-            batch, src_lang=src_lang, tgt_lang=tgt_lang
-        )
+        batch = ip.preprocess_batch(batch, src_lang=src_lang, tgt_lang=tgt_lang)
 
         # Tokenize the batch and generate input encodings
         inputs = tokenizer(
@@ -101,8 +84,8 @@ def batch_translate(input_sentences, src_lang, tgt_lang, model, tokenizer):
         )
 
         # Postprocess the translations, including entity replacement
-        translations += postprocess_batch(
-            generated_tokens, lang=tgt_lang, placeholder_entity_map=entity_map
+        translations += ip.postprocess_batch(
+            generated_tokens, lang=tgt_lang
         )
 
         del inputs
@@ -110,7 +93,34 @@ def batch_translate(input_sentences, src_lang, tgt_lang, model, tokenizer):
 
     return translations
 
-def chunk_and_translate(batched_data):
+def combine_sentences(sentences, max_length=700):
+
+    """
+    sentences: List of sentences
+    new_list: List of sentences where each sentence is less than max_length
+
+    If sequence length in a batch is small, we combine multiple sentences into one while ensuring that the length of the combined sentence is less than max_length.
+    The max_length is set to 700 characters, assuming it to be safe proxy for max_length=256 tokens for generation.
+    This is done, so that by having comparable sequence lengths in a batch, we can use same batch size, achieving better GPU utilization.
+    """
+
+    new_list = []
+    current_sentence = ""
+
+    for sentence in sentences:
+        if len(current_sentence) + len(sentence) <= max_length:
+            current_sentence += sentence
+        else:
+            new_list.append(current_sentence)
+            current_sentence = sentence
+
+    # Add the last sentence, if any
+    if current_sentence:
+        new_list.append(current_sentence)
+
+    return new_list
+
+def chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip):
   
   """
     Chunk the batched data into smaller chunks and translate them.
@@ -128,6 +138,7 @@ def chunk_and_translate(batched_data):
       for line in rows_split_by_newline:
           if line.strip():
               line_split = [k.strip() for k in sent_tokenize(line) if k.strip()]
+              line_split = combine_sentences(line_split)
               minibatch.extend(line_split)
               consecutive_newline_info[len(minibatch)] =  1
           else:
@@ -138,7 +149,7 @@ def chunk_and_translate(batched_data):
 
       idx_list.append(len(minibatch))
 
-  translations = batch_translate(minibatch, "eng_Latn", "hin_Deva", en_indic_model, en_indic_tokenizer)
+  translations = batch_translate(minibatch, "eng_Latn", "hin_Deva", en_indic_model, en_indic_tokenizer, ip)
 
   row_data = []
   start_idx = 0
@@ -158,7 +169,7 @@ def chunk_and_translate(batched_data):
 
   return row_data
 
-def process(dataset, input_file_path):
+def process(dataset, text_column, input_file_path, en_indic_model, en_indic_tokenizer, ip):
     """
     Preprocess the dataset and translate it.
     Modify this as per your needs.
@@ -174,8 +185,8 @@ def process(dataset, input_file_path):
     for i in tqdm(range(0, len(dataset), ROW_BATCH), total=total_batches, desc="Processing Batches"):
 
         batched_data = dataset[i:min(i + ROW_BATCH, len(dataset))]
-        batched_data = [k['text'] for k in batched_data] # Text column name in your dataset
-        translated_rows = chunk_and_translate(batched_data)
+        batched_data = [k[text_column] for k in batched_data] 
+        translated_rows = chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip)
 
         with open(output_file_path, 'a', encoding='utf-8') as file:
            for rowidx, row in enumerate(translated_rows):
@@ -183,8 +194,18 @@ def process(dataset, input_file_path):
 
 if __name__ == "__main__":
 
+    en_indic_ckpt_dir = "ai4bharat/indictrans2-en-indic-1B" # ai4bharat/indictrans2-en-indic-dist-200M
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    BATCH_SIZE = 12 # Modify based upon GPU memory
+    ROW_BATCH = BATCH_SIZE*10 # Concatentate BATCH_SIZE*10 rows and then process them in chunks of BATCH_SIZE
+    quantization = ""
+    text_column = "text" # Text column name in your dataset that you want to translate
+
+    en_indic_tokenizer, en_indic_model = initialize_model_and_tokenizer(en_indic_ckpt_dir, "en-indic", quantization)
+    ip = IndicProcessor(inference=True)
+    
     input_file_path = sys.argv[1]
     with open(input_file_path, 'r') as file:
         dataset = [json.loads(line) for line in file]
-
-    process(dataset, input_file_path)
+        
+    process(dataset, input_file_path, en_indic_model, en_indic_tokenizer, ip)
