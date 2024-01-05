@@ -208,4 +208,4 @@ if __name__ == "__main__":
     with open(input_file_path, 'r') as file:
         dataset = [json.loads(line) for line in file]
         
-    process(dataset, input_file_path, en_indic_model, en_indic_tokenizer, ip)
+    process(dataset, text_column, input_file_path, en_indic_model, en_indic_tokenizer, ip)
