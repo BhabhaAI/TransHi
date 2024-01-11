@@ -5,7 +5,7 @@ English to Hindi Translation &amp; Hindi to Roman Hindi Transliteration
 ```
 pip install -q -U transformers[sentencepiece] datasets
 
-pip install -q nltk sacremoses regex pandas mock transformers==4.28.1 sacrebleu==2.3.1 urduhack[tf] mosestokenizer ctranslate2==3.9.0 gradio
+pip install -q nltk sacremoses regex pandas mock sacrebleu==2.3.1 urduhack[tf] mosestokenizer ctranslate2==3.9.0 gradio
 
 git clone https://github.com/anoopkunchukuttan/indic_nlp_resources.git
 export INDIC_RESOURCES_PATH="/indic_nlp_resources"
