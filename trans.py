@@ -3,6 +3,7 @@ from tqdm import tqdm
 import json
 import os
 import sys
+import re
 import torch
 from transformers import AutoModelForSeq2SeqLM, BitsAndBytesConfig
 from IndicTransTokenizer import IndicProcessor, IndicTransTokenizer
@@ -120,6 +121,11 @@ def combine_sentences(sentences, max_length=700):
 
     return new_list
 
+def split_except_fraction(text):
+    # Use regex to split at dots, except when surrounded by numbers
+    result = re.split(r'(?<!\d)\.(?!\d)', text)
+    return result
+
 def chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip):
   
   """
@@ -137,7 +143,7 @@ def chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip):
 
       for line in rows_split_by_newline:
           if line.strip():
-              line_split = [k.strip() for k in line.strip(".") if k.strip()]
+              line_split = [k.strip() for k in split_except_fraction(line) if k.strip()]
               # line_split = [k.strip() for k in sent_tokenize(line) if k.strip()]
               line_split = combine_sentences(line_split)
               minibatch.extend(line_split)
