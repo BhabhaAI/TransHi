@@ -143,18 +143,19 @@ def combine_sentences(sentences, max_length=700):
     """
 
     new_list = []
-    current_sentence = ""
+    combined = ""
 
     for sentence in sentences:
-        if len(current_sentence) + len(sentence) <= max_length:
-            current_sentence += " " + sentence
-        else:
-            new_list.append(current_sentence)
-            current_sentence = sentence
 
-    # Add the last sentence, if any
-    if current_sentence:
-        new_list.append(current_sentence)
+        if len(combined) + len(sentence) < max_length:
+            combined += sentence
+        else:
+            if combined:
+                new_list.append(combined)
+            combined = sentence
+
+    if combined:
+        new_list.append(combined)
 
     return new_list
 
@@ -165,7 +166,7 @@ def combine_sentences(sentences, max_length=700):
 #     result = re.split(r'(?<=(?<!\d)\.(?!\d))', text)
 #     return result
 
-def split_sentences(paragraph, lang):
+def split_sentences(paragraph, lang, max_length=700):
     """
     Splits the input text paragraph into sentences. It uses `moses` for English and 
     `indic-nlp` for Indic languages.
@@ -181,7 +182,7 @@ def split_sentences(paragraph, lang):
         with MosesSentenceSplitter(flores_codes[lang]) as splitter:
             sents_moses = splitter([paragraph])
         sents_nltk = sent_tokenize(paragraph)
-        if len(sents_nltk) < len(sents_moses):
+        if len(sents_nltk) < len(sents_moses) and all(len(sent) < max_length for sent in sents_nltk):
             sents = sents_nltk
         else:
             sents =  sents_moses
