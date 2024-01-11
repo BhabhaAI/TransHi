@@ -7,6 +7,43 @@ import re
 import torch
 from transformers import AutoModelForSeq2SeqLM, BitsAndBytesConfig
 from IndicTransTokenizer import IndicProcessor, IndicTransTokenizer
+from indicnlp.tokenize.sentence_tokenize import sentence_split, DELIM_PAT_NO_DANDA
+from mosestokenizer import MosesSentenceSplitter
+
+flores_codes = {
+    "asm_Beng": "as",
+    "awa_Deva": "hi",
+    "ben_Beng": "bn",
+    "bho_Deva": "hi",
+    "brx_Deva": "hi",
+    "doi_Deva": "hi",
+    "eng_Latn": "en",
+    "gom_Deva": "kK",
+    "guj_Gujr": "gu",
+    "hin_Deva": "hi",
+    "hne_Deva": "hi",
+    "kan_Knda": "kn",
+    "kas_Arab": "ur",
+    "kas_Deva": "hi",
+    "kha_Latn": "en",
+    "lus_Latn": "en",
+    "mag_Deva": "hi",
+    "mai_Deva": "hi",
+    "mal_Mlym": "ml",
+    "mar_Deva": "mr",
+    "mni_Beng": "bn",
+    "mni_Mtei": "hi",
+    "npi_Deva": "ne",
+    "ory_Orya": "or",
+    "pan_Guru": "pa",
+    "san_Deva": "hi",
+    "sat_Olck": "or",
+    "snd_Arab": "ur",
+    "snd_Deva": "hi",
+    "tam_Taml": "ta",
+    "tel_Telu": "te",
+    "urd_Arab": "ur",
+}
 
 def initialize_model_and_tokenizer(ckpt_dir, direction, quantization):
 
@@ -121,10 +158,36 @@ def combine_sentences(sentences, max_length=700):
 
     return new_list
 
-def split_except_fraction(text):
-    # Use regex to split at dots, except when surrounded by numbers
-    result = re.split(r'(?<!\d)\.(?!\d)', text)
-    return result
+
+# def split_except_fraction(text):
+#     # Use regex to split at dots, except when surrounded by numbers
+#     # If splitted at ".", include the "." in the preceding sentence
+#     result = re.split(r'(?<=(?<!\d)\.(?!\d))', text)
+#     return result
+
+def split_sentences(paragraph, lang):
+    """
+    Splits the input text paragraph into sentences. It uses `moses` for English and 
+    `indic-nlp` for Indic languages.
+    
+    Args:
+        paragraph (str): input text paragraph.
+        lang (str): flores language code.
+    
+    Returns:
+        List[str] -> list of sentences.
+    """
+    if lang == "eng_Latn":
+        with MosesSentenceSplitter(flores_codes[lang]) as splitter:
+            sents_moses = splitter([paragraph])
+        sents_nltk = sent_tokenize(paragraph)
+        if len(sents_nltk) < len(sents_moses):
+            sents = sents_nltk
+        else:
+            sents =  sents_moses
+        return [sent.replace("\xad", "") for sent in sents]
+    else:
+        return sentence_split(paragraph, lang=flores_codes[lang], delim_pat=DELIM_PAT_NO_DANDA)
 
 def chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip):
   
@@ -143,7 +206,7 @@ def chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip):
 
       for line in rows_split_by_newline:
           if line.strip():
-              line_split = [k.strip() for k in split_except_fraction(line) if k.strip()]
+              line_split = [k.strip() for k in split_sentences(line, "eng_Latn") if k.strip()]
               # line_split = [k.strip() for k in sent_tokenize(line) if k.strip()]
               line_split = combine_sentences(line_split)
               minibatch.extend(line_split)
