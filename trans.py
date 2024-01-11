@@ -109,7 +109,7 @@ def combine_sentences(sentences, max_length=700):
 
     for sentence in sentences:
         if len(current_sentence) + len(sentence) <= max_length:
-            current_sentence += sentence
+            current_sentence += " " + sentence
         else:
             new_list.append(current_sentence)
             current_sentence = sentence
@@ -137,7 +137,8 @@ def chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip):
 
       for line in rows_split_by_newline:
           if line.strip():
-              line_split = [k.strip() for k in sent_tokenize(line) if k.strip()]
+              line_split = [k.strip() for k in line.strip(".") if k.strip()]
+              # line_split = [k.strip() for k in sent_tokenize(line) if k.strip()]
               line_split = combine_sentences(line_split)
               minibatch.extend(line_split)
               consecutive_newline_info[len(minibatch)] =  1
@@ -163,7 +164,7 @@ def chunk_and_translate(batched_data, en_indic_model, en_indic_tokenizer, ip):
               translation_segment.insert(adjusted_index, "\n" * count)
               insert_count += 1 # No matter how many new line character are added, we are adding only one element in translation_segment list and therefore we put 1 here
 
-      translated_text = " ".join(translation_segment).replace(" \n", "\n").replace("\n ", "\n")
+      translated_text = " ".join(translation_segment).replace(" \n", "\n").replace("\n ", "\n").strip()
       row_data.append(translated_text)
       start_idx = idx
 
