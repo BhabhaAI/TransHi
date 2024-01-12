@@ -148,7 +148,7 @@ def combine_sentences(sentences, max_length=700):
     for sentence in sentences:
 
         if len(combined) + len(sentence) < max_length:
-            combined += sentence
+            combined = (combined + " " + sentence).strip()
         else:
             if combined:
                 new_list.append(combined)
